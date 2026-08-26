@@ -1,28 +1,23 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import type { Hike } from './types'
+import HikeList from './HikeList.vue'
+import HikeEdit from './HikeEdit.vue'
 
-interface Hike {
-  id: number
-  title: string
-  location: string
-  date: string
-  distanceKm: number
-  notes: string
-}
+type Screen = 'list' | 'edit'
 
 const STORAGE_KEY = 'hike-tracker:hikes'
 
 const hikes = ref<Hike[]>(loadHikes())
-const form = ref({
-  title: '',
-  location: '',
-  date: '',
-  distanceKm: 0,
-  notes: ''
-})
+const screen = ref<Screen>('list')
+const editingHike = ref<Hike | null>(null)
 
 const totalDistance = computed(() =>
   hikes.value.reduce((total, hike) => total + hike.distanceKm, 0),
+)
+
+const totalVerticalMeters = computed(() =>
+  hikes.value.reduce((total, hike) => total + hike.verticalMetersGained, 0),
 )
 
 watch(
@@ -33,27 +28,24 @@ watch(
   { deep: true },
 )
 
-function addHike() {
-  if (!form.value.title.trim() || !form.value.location.trim() || !form.value.date) {
-    return
-  }
+function openAdd() {
+  editingHike.value = null
+  screen.value = 'edit'
+}
 
-  hikes.value.unshift({
-    id: Date.now(),
-    title: form.value.title.trim(),
-    location: form.value.location.trim(),
-    date: form.value.date,
-    distanceKm: Number(form.value.distanceKm),
-    notes: form.value.notes.trim()
-  })
+function openEdit(id: number) {
+  editingHike.value = hikes.value.find((h) => h.id === id) ?? null
+  screen.value = 'edit'
+}
 
-  form.value = {
-    title: '',
-    location: '',
-    date: '',
-    distanceKm: 0,
-    notes: ''
+function saveHike(hike: Hike) {
+  const idx = hikes.value.findIndex((h) => h.id === hike.id)
+  if (idx >= 0) {
+    hikes.value[idx] = hike
+  } else {
+    hikes.value.unshift(hike)
   }
+  screen.value = 'list'
 }
 
 function removeHike(id: number) {
@@ -80,6 +72,7 @@ function loadHikes(): Hike[] {
         typeof item?.location === 'string' &&
         typeof item?.date === 'string' &&
         typeof item?.distanceKm === 'number' &&
+        typeof item?.verticalMetersGained === 'number' &&
         typeof item?.notes === 'string',
     )
   } catch {
@@ -89,115 +82,19 @@ function loadHikes(): Hike[] {
 </script>
 
 <template>
-  <section class="tracker">
-    <h1>Hike Tracker</h1>
-    <p class="summary">
-      {{ hikes.length }} hikes logged · {{ totalDistance.toFixed(1) }} km total
-    </p>
-
-    <form class="hike-form" @submit.prevent="addHike">
-      <label>
-        Hike name
-        <input v-model="form.title" required type="text" />
-      </label>
-
-      <label>
-        Location
-        <input v-model="form.location" required type="text" />
-      </label>
-
-      <label>
-        Date
-        <input v-model="form.date" required type="date" />
-      </label>
-
-      <label>
-        Distance (km)
-        <input v-model.number="form.distanceKm" min="0" required step="0.1" type="number" />
-      </label>
-
-      <label>
-        Notes
-        <textarea v-model="form.notes" rows="2" />
-      </label>
-
-      <button type="submit">Add hike</button>
-    </form>
-
-    <ul v-if="hikes.length" class="hike-list">
-      <li v-for="hike in hikes" :key="hike.id">
-        <div class="hike-header">
-          <strong>{{ hike.title }}</strong>
-          <button type="button" @click="removeHike(hike.id)">Remove</button>
-        </div>
-        <p>{{ hike.location }} · {{ hike.date }} · {{ hike.distanceKm.toFixed(1) }} km</p>
-        <p v-if="hike.notes">{{ hike.notes }}</p>
-      </li>
-    </ul>
-    <p v-else>No hikes logged yet.</p>
-  </section>
+  <HikeList
+    v-if="screen === 'list'"
+    :hikes="hikes"
+    :total-distance="totalDistance"
+    :total-vertical-meters="totalVerticalMeters"
+    @add="openAdd"
+    @select="openEdit"
+    @remove="removeHike"
+  />
+  <HikeEdit
+    v-else
+    :hike="editingHike"
+    @save="saveHike"
+    @cancel="screen = 'list'"
+  />
 </template>
-
-<style scoped>
-.tracker {
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 2rem 1rem;
-}
-
-.summary {
-  color: #4b5563;
-}
-
-.hike-form {
-  display: grid;
-  gap: 0.75rem;
-  margin: 1rem 0 1.5rem;
-}
-
-label {
-  display: grid;
-  gap: 0.25rem;
-}
-
-input,
-textarea {
-  border: 1px solid #cbd5e1;
-  border-radius: 0.375rem;
-  padding: 0.5rem;
-}
-
-button {
-  width: fit-content;
-  border: none;
-  border-radius: 0.375rem;
-  background: #2563eb;
-  color: white;
-  padding: 0.5rem 0.75rem;
-  cursor: pointer;
-}
-
-.hike-list {
-  list-style: none;
-  padding: 0;
-  display: grid;
-  gap: 0.75rem;
-}
-
-.hike-list li {
-  border: 1px solid #dbe3ef;
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-}
-
-.hike-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.hike-header button {
-  background: #dc2626;
-}
-</style>
